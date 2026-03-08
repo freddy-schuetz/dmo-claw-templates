@@ -1,0 +1,95 @@
+{
+  "format": "n8n-claw-template",
+  "format_version": 1,
+  "sub": {
+    "name": "MCP Sub: Alpine Weather",
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "nodes": [
+      {
+        "id": "sub-trigger",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [0, 0],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "sub-code",
+        "name": "Alpine Weather",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [256, 0],
+        "parameters": {
+          "jsCode": "const input = $input.first().json;\nconst location = input.location || 'Zugspitze';\n\n// Geocoding with German language\nconst geo = await helpers.httpRequest({\n  method: 'GET',\n  url: 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(location) + '&count=3&language=de'\n});\n\nif (!geo.results || geo.results.length === 0) {\n  return [{ json: { error: 'Ort nicht gefunden: ' + location } }];\n}\n\nconst loc = geo.results[0];\nconst lat = loc.latitude;\nconst lon = loc.longitude;\nconst elev = loc.elevation || 'unbekannt';\nconst name = loc.name + (loc.admin1 ? ', ' + loc.admin1 : '') + (loc.country ? ', ' + loc.country : '');\n\n// Current weather + snow + 7-day forecast\nconst w = await helpers.httpRequest({\n  method: 'GET',\n  url: 'https://api.open-meteo.com/v1/forecast'\n    + '?latitude=' + lat + '&longitude=' + lon\n    + '&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,snowfall,weather_code,wind_speed_10m,wind_gusts_10m,snow_depth'\n    + '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,snowfall_sum,wind_speed_10m_max,weather_code'\n    + '&hourly=freezing_level_height'\n    + '&timezone=Europe/Berlin'\n    + '&forecast_days=7'\n});\n\nconst c = w.current;\n\n// Get freezing level from first hourly value\nconst freezingLevel = w.hourly && w.hourly.freezing_level_height ? w.hourly.freezing_level_height[0] : null;\n\n// Weather code descriptions (German)\nconst weatherCodes = {\n  0: 'Klar', 1: 'Überwiegend klar', 2: 'Teilweise bewölkt', 3: 'Bewölkt',\n  45: 'Nebel', 48: 'Reifnebel',\n  51: 'Leichter Nieselregen', 53: 'Nieselregen', 55: 'Starker Nieselregen',\n  61: 'Leichter Regen', 63: 'Regen', 65: 'Starker Regen',\n  71: 'Leichter Schneefall', 73: 'Schneefall', 75: 'Starker Schneefall',\n  77: 'Schneegriesel', 80: 'Leichte Regenschauer', 81: 'Regenschauer', 82: 'Starke Regenschauer',\n  85: 'Leichte Schneeschauer', 86: 'Starke Schneeschauer',\n  95: 'Gewitter', 96: 'Gewitter mit Hagel', 99: 'Starkes Gewitter mit Hagel'\n};\n\nlet result = '📍 ' + name + ' (Höhe: ' + elev + ' m)\\n\\n';\n\n// Current conditions\nresult += '🌡️ AKTUELL:\\n';\nresult += '  Temperatur: ' + c.temperature_2m + '°C (gefühlt ' + c.apparent_temperature + '°C)\\n';\nresult += '  Wetter: ' + (weatherCodes[c.weather_code] || 'Code ' + c.weather_code) + '\\n';\nresult += '  Wind: ' + c.wind_speed_10m + ' km/h (Böen ' + c.wind_gusts_10m + ' km/h)\\n';\nresult += '  Luftfeuchtigkeit: ' + c.relative_humidity_2m + '%\\n';\nif (c.precipitation > 0) result += '  Niederschlag: ' + c.precipitation + ' mm\\n';\n\n// Snow conditions\nresult += '\\n❄️ SCHNEE:\\n';\nresult += '  Schneehöhe: ' + (c.snow_depth !== null && c.snow_depth !== undefined ? c.snow_depth + ' cm' : 'keine Daten') + '\\n';\nif (c.snowfall > 0) result += '  Aktueller Schneefall: ' + c.snowfall + ' cm\\n';\nif (freezingLevel !== null) result += '  Nullgradgrenze: ' + Math.round(freezingLevel) + ' m\\n';\n\n// 7-day forecast\nresult += '\\n📅 7-TAGE-PROGNOSE:\\n';\nconst days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];\nconst d = w.daily;\nfor (let i = 0; i < 7; i++) {\n  const date = new Date(d.time[i]);\n  const dayName = days[date.getDay()];\n  const dateStr = date.getDate() + '.' + (date.getMonth() + 1) + '.';\n  const wc = weatherCodes[d.weather_code[i]] || '';\n  result += '  ' + dayName + ' ' + dateStr + ': ';\n  result += d.temperature_2m_min[i] + '/' + d.temperature_2m_max[i] + '°C, ';\n  result += wc;\n  if (d.precipitation_probability_max[i] > 0) result += ', ' + d.precipitation_probability_max[i] + '% Niederschlag';\n  if (d.snowfall_sum[i] > 0) result += ', ' + d.snowfall_sum[i] + ' cm Neuschnee';\n  result += ', Wind ' + d.wind_speed_10m_max[i] + ' km/h';\n  result += '\\n';\n}\n\nreturn [{ json: { result } }];"
+        }
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [[{ "node": "Alpine Weather", "type": "main", "index": 0 }]]
+      }
+    }
+  },
+  "server": {
+    "name": "MCP: Alpine Weather",
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "nodes": [
+      {
+        "id": "mcp-trigger",
+        "name": "MCP Server Trigger",
+        "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+        "typeVersion": 2,
+        "position": [0, 0],
+        "parameters": {
+          "path": "weather-alpine"
+        }
+      },
+      {
+        "id": "tool-wf",
+        "name": "alpine_weather",
+        "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+        "typeVersion": 2.2,
+        "position": [0, 300],
+        "parameters": {
+          "name": "alpine_weather",
+          "description": "Alpine weather with snow depth, freezing level, and 7-day forecast. Parameter: location (place name, e.g. 'Zugspitze', 'Garmisch-Partenkirchen', 'Mittenwald')",
+          "workflowId": {
+            "__rl": true,
+            "value": "REPLACE_SUB_WORKFLOW_ID",
+            "mode": "id"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "location": "={{ $fromAI('location', 'Location name for alpine weather query', 'string') }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              {
+                "id": "location",
+                "displayName": "location",
+                "type": "string",
+                "description": "Location name for alpine weather query (e.g. Zugspitze, Garmisch-Partenkirchen)",
+                "required": true
+              }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          }
+        }
+      }
+    ],
+    "connections": {
+      "alpine_weather": {
+        "ai_tool": [[{ "node": "MCP Server Trigger", "type": "ai_tool", "index": 0 }]]
+      }
+    }
+  }
+}
