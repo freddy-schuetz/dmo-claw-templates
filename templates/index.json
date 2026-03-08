@@ -10,6 +10,20 @@
       "description": "Alpine weather with snow depth, freezing level, and 7-day forecast — German geocoding (Open-Meteo, free)",
       "credentials_required": [],
       "version": "1.0.0"
+    },
+    {
+      "id": "google-reviews",
+      "name": "Google Reviews",
+      "type": "native",
+      "category": "tourism",
+      "description": "Query locally cached Google Reviews — ratings, summaries, unanswered reviews",
+      "credentials_required": [
+        {
+          "key": "google_places_api_key",
+          "label": "Google Places API Key"
+        }
+      ],
+      "version": "1.0.0"
     }
   ]
 }

@@ -1,0 +1,126 @@
+{
+  "format": "n8n-claw-template",
+  "format_version": 1,
+  "sub": {
+    "name": "MCP Sub: Google Reviews",
+    "settings": {
+      "executionOrder": "v1",
+      "callerPolicy": "workflowsFromSameOwner"
+    },
+    "nodes": [
+      {
+        "id": "sub-trigger",
+        "name": "Execute Workflow Trigger",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.1,
+        "position": [0, 0],
+        "parameters": {
+          "inputSource": "passthrough"
+        }
+      },
+      {
+        "id": "sub-code",
+        "name": "Query Reviews",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [256, 0],
+        "parameters": {
+          "jsCode": "const input = $input.first().json;\nconst tool = input.tool || 'query_reviews';\nconst baseUrl = '{{SUPABASE_URL}}';\nconst serviceKey = '{{SUPABASE_SERVICE_KEY}}';\nconst headers = {\n  'apikey': serviceKey,\n  'Authorization': 'Bearer ' + serviceKey,\n  'Content-Type': 'application/json'\n};\n\nif (tool === 'review_summary') {\n  // Aggregate stats\n  const reviews = await helpers.httpRequest({\n    method: 'GET',\n    url: baseUrl + '/rest/v1/reviews?select=rating,answered,business_id',\n    headers\n  });\n\n  if (!reviews || reviews.length === 0) {\n    return [{ json: { result: 'Keine Bewertungen in der Datenbank.' } }];\n  }\n\n  const total = reviews.length;\n  const avgRating = (reviews.reduce((s, r) => s + r.rating, 0) / total).toFixed(1);\n  const unanswered = reviews.filter(r => !r.answered).length;\n  const byRating = {};\n  for (const r of reviews) {\n    byRating[r.rating] = (byRating[r.rating] || 0) + 1;\n  }\n\n  let result = '📊 BEWERTUNGS-ÜBERSICHT\\n';\n  result += '  Gesamt: ' + total + ' Bewertungen\\n';\n  result += '  Durchschnitt: ' + avgRating + ' ⭐\\n';\n  result += '  Unbeantwortet: ' + unanswered + '\\n\\n';\n  result += '  Verteilung:\\n';\n  for (let i = 5; i >= 1; i--) {\n    const count = byRating[i] || 0;\n    const bar = '█'.repeat(Math.round(count / total * 20));\n    result += '    ' + i + '⭐ ' + bar + ' ' + count + '\\n';\n  }\n\n  return [{ json: { result } }];\n}\n\n// query_reviews\nconst businessName = input.business_name || '';\nconst minRating = input.min_rating || null;\nconst maxRating = input.max_rating || null;\nconst sinceDays = input.since_days || 30;\n\nlet url = baseUrl + '/rest/v1/reviews?select=*,member_businesses(name,category)&order=fetched_at.desc&limit=20';\n\nif (minRating) url += '&rating=gte.' + minRating;\nif (maxRating) url += '&rating=lte.' + maxRating;\n\nconst sinceDate = new Date();\nsinceDate.setDate(sinceDate.getDate() - sinceDays);\nurl += '&fetched_at=gte.' + sinceDate.toISOString();\n\nconst reviews = await helpers.httpRequest({ method: 'GET', url, headers });\n\nif (!reviews || reviews.length === 0) {\n  return [{ json: { result: 'Keine Bewertungen gefunden für die angegebenen Filter.' } }];\n}\n\n// Filter by business name if provided\nlet filtered = reviews;\nif (businessName) {\n  const search = businessName.toLowerCase();\n  filtered = reviews.filter(r =>\n    r.member_businesses && r.member_businesses.name &&\n    r.member_businesses.name.toLowerCase().includes(search)\n  );\n}\n\nif (filtered.length === 0) {\n  return [{ json: { result: 'Keine Bewertungen für \"' + businessName + '\" gefunden.' } }];\n}\n\nlet result = '📝 BEWERTUNGEN (' + filtered.length + ' Ergebnisse)\\n\\n';\nfor (const r of filtered) {\n  const biz = r.member_businesses ? r.member_businesses.name : 'Unbekannt';\n  const stars = '⭐'.repeat(r.rating);\n  const date = r.published_at ? new Date(r.published_at).toLocaleDateString('de-DE') : '';\n  const status = r.answered ? '✅' : '❌';\n  result += biz + ' — ' + stars + ' (' + date + ') ' + status + '\\n';\n  if (r.author) result += '  Von: ' + r.author + '\\n';\n  if (r.text) result += '  \"' + r.text.substring(0, 200) + (r.text.length > 200 ? '...' : '') + '\"\\n';\n  result += '\\n';\n}\n\nreturn [{ json: { result } }];"
+        }
+      }
+    ],
+    "connections": {
+      "Execute Workflow Trigger": {
+        "main": [[{ "node": "Query Reviews", "type": "main", "index": 0 }]]
+      }
+    }
+  },
+  "server": {
+    "name": "MCP: Google Reviews",
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "nodes": [
+      {
+        "id": "mcp-trigger",
+        "name": "MCP Server Trigger",
+        "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+        "typeVersion": 2,
+        "position": [0, 0],
+        "parameters": {
+          "path": "google-reviews"
+        }
+      },
+      {
+        "id": "tool-query",
+        "name": "query_reviews",
+        "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+        "typeVersion": 2.2,
+        "position": [0, 300],
+        "parameters": {
+          "name": "query_reviews",
+          "description": "Search Google Reviews. Parameters: business_name (optional filter), min_rating (1-5, optional), max_rating (1-5, optional), since_days (default 30)",
+          "workflowId": {
+            "__rl": true,
+            "value": "REPLACE_SUB_WORKFLOW_ID",
+            "mode": "id"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "tool": "query_reviews",
+              "business_name": "={{ $fromAI('business_name', 'Business name to filter by (optional)', 'string') }}",
+              "min_rating": "={{ $fromAI('min_rating', 'Minimum star rating 1-5 (optional)', 'string') }}",
+              "since_days": "={{ $fromAI('since_days', 'Number of days to look back (default 30)', 'string') }}"
+            },
+            "matchingColumns": [],
+            "schema": [
+              { "id": "tool", "displayName": "tool", "type": "string", "required": true },
+              { "id": "business_name", "displayName": "business_name", "type": "string", "required": false },
+              { "id": "min_rating", "displayName": "min_rating", "type": "string", "required": false },
+              { "id": "since_days", "displayName": "since_days", "type": "string", "required": false }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          }
+        }
+      },
+      {
+        "id": "tool-summary",
+        "name": "review_summary",
+        "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+        "typeVersion": 2.2,
+        "position": [300, 300],
+        "parameters": {
+          "name": "review_summary",
+          "description": "Get aggregate review statistics: total count, average rating, distribution, unanswered count",
+          "workflowId": {
+            "__rl": true,
+            "value": "REPLACE_SUB_WORKFLOW_ID",
+            "mode": "id"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "tool": "review_summary"
+            },
+            "matchingColumns": [],
+            "schema": [
+              { "id": "tool", "displayName": "tool", "type": "string", "required": true }
+            ],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          }
+        }
+      }
+    ],
+    "connections": {
+      "query_reviews": {
+        "ai_tool": [[{ "node": "MCP Server Trigger", "type": "ai_tool", "index": 0 }]]
+      },
+      "review_summary": {
+        "ai_tool": [[{ "node": "MCP Server Trigger", "type": "ai_tool", "index": 0 }]]
+      }
+    }
+  }
+}
