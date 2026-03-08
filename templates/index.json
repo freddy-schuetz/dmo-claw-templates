@@ -24,6 +24,18 @@
         }
       ],
       "version": "1.0.0"
+    },
+    {
+      "id": "instagram-post",
+      "name": "Instagram Post",
+      "type": "native",
+      "category": "tourism",
+      "description": "Create and publish Instagram posts via Graph API, with scheduling support",
+      "credentials_required": [
+        { "key": "instagram_token", "label": "Instagram Long-Lived Access Token" },
+        { "key": "instagram_user_id", "label": "Instagram Business Account ID" }
+      ],
+      "version": "1.0.0"
     }
   ]
 }

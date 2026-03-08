@@ -1,0 +1,34 @@
+{
+  "id": "instagram-post",
+  "name": "Instagram Post",
+  "version": "1.0.0",
+  "updated": "2026-03-08",
+  "type": "native",
+  "category": "tourism",
+  "description": "Create and publish Instagram posts via Graph API. Supports scheduling via scheduled_posts table.",
+  "credentials_required": [
+    {
+      "key": "instagram_token",
+      "label": "Instagram Long-Lived Access Token",
+      "hint": "Generate via Meta Developer App → Graph API Explorer → extend to 60-day token"
+    },
+    {
+      "key": "instagram_user_id",
+      "label": "Instagram Business Account ID",
+      "hint": "Your Instagram Business/Creator account ID (numeric)"
+    }
+  ],
+  "tools": [
+    {
+      "name": "create_instagram_post",
+      "description": "Create and publish an Instagram post with image and caption"
+    },
+    {
+      "name": "schedule_post",
+      "description": "Schedule a post for later publication"
+    }
+  ],
+  "author": "freddy-schuetz",
+  "license": "MIT",
+  "tested_n8n_version": "2.10.4"
+}
