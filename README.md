@@ -7,6 +7,8 @@ MCP template catalog for [dmo-claw](https://github.com/freddy-schuetz/dmo-claw) 
 | Template | Category | Description | API Key |
 |---|---|---|---|
 | `weather-alpine` | weather | Alpine weather, snow depth, freezing level, 7-day forecast | No (free) |
+| `google-reviews` | reviews | Query locally cached Google Reviews, rating summaries, unanswered alerts | Google Places API Key |
+| `instagram-post` | social | Create & schedule Instagram posts via Graph API | Instagram Token + Account ID |
 
 ## Usage
 
